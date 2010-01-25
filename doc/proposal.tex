@@ -1,0 +1,46 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage{listings}
+\author{James Halliday}
+\title{
+    Research Proposal \\
+    \normalsize{Typed Genetic Programming Ecosystem}
+}
+
+\begin{document}
+\maketitle
+
+Genetic programming is an approach to search and optimization where
+a population of computer programs competes to maximize a fitness landscape.
+As in biological evolution, these individuals undergo selection, variation, and
+inheritance in order to produce an increasingly fit population over time.
+Genetic programming achieves mutations through operations on abstract syntax
+trees, which represent source code structure at a higher level.
+
+Researchers such as Yu and Clack have demonstrated
+\footnote{PolyGP: A Polymorphic Genetic Programming System in Haskell}
+the utility of type systems in producing more viable offspring.
+By limiting mutations to those that result in valid programs, evolution within a
+typed language can be accelerated. However, PolyGP only uses three types and a
+specialized sublanguage to perform its genetic programming simulation.
+
+I propose a genetic programming framework written in the Haskell programming
+language that will evolve genetic programs also written in haskell.
+The simulation will make type-safe mutations with whatever functions are
+available from a prelude of pre-defined operations and fragments of other
+individuals in the population.
+For some experiments, the prelude could even include the source of the
+simulation itself with the hope that such tools will accelerate convergent
+evolution.
+
+From this research, I expect to produce:
+\begin{itemize}
+\item
+    a genetic programming framework for selection, variation, and inheritance
+\item
+    an analysis of how initial conditions and resource limits affect program
+    evolution
+\item 
+    generated solutions for different types of fitness landscapes
+\end{itemize}
+
+\end{document}
