@@ -21,7 +21,7 @@ import qualified Data.Map as M
 import Data.Function (on)
 import Data.List (inits,nubBy,permutations)
 import Control.Arrow (second,(&&&))
-import Control.Monad (filterM)
+import Control.Monad
 
 type TypeTrans = (TypeRep,TypeRep)
 type TTFunc = (TypeTrans,Dynamic)
@@ -43,6 +43,7 @@ pool = M.fromList [
         --("acos",(t acos)),
         ("succ",(t (succ :: Int -> Int))),
         ("pred",(t (pred :: Int -> Int)))
+        --("(-1)",(t (-1)))
     ]
     where
         t :: Typeable a => a -> TTFunc
@@ -55,11 +56,9 @@ findPaths (from,to) pool =
     -- outer types match up:
     $ filter ((from ==) . fst . fst . snd . head)
     $ filter ((to ==) . snd . fst . snd . last)
-    -- all possible chains: (could be more efficient)
-    $ nubBy ((==) `on` map fst)
-    $ concatMap (tail . inits)
-    $ permutations
-    $ M.assocs pool
+    -- all possible chains (infinite):
+    $ concat [ replicateM n ax | n <- [1..]]
+    where ax = M.assocs pool
 
 typesMatch :: TTChain -> Bool
 typesMatch chain = all checker $ zip fx (tail fx)
