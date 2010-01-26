@@ -1,5 +1,12 @@
 {- Find all valid function composition chains between two monomorphic types
-   given some pool of monomorphic functions. -}
+   given some pool of monomorphic functions.
+
+    Example:
+    > let t = typeOf (undefined :: Double) \
+    in map (map fst) $ findPaths (t,t) pool
+    [["sin"],["cos"],["cos","sin"]]
+
+-}
 
 {-# LANGUAGE ExtendedDefaultRules #-}
 -- ^ tries really hard to make everything use monomorphic types
