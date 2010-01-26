@@ -1,5 +1,8 @@
+{- Find all valid function composition chains between two monomorphic types
+   given some pool of monomorphic functions. -}
+
 {-# LANGUAGE ExtendedDefaultRules #-}
--- ^ tries really hard to use monomorphic types
+-- ^ tries really hard to make everything use monomorphic types
 -- todo: expand PolyTypeable to work with this
 
 import Data.Typeable (Typeable,TypeRep,typeOf,typeRepArgs)
@@ -17,7 +20,7 @@ transOf :: Typeable a => a -> TypeTrans
 transOf x = (inT,outT) where
     [inT,outT] = case typeRepArgs $ typeOf x of
         xx@[_,_] -> xx
-        args -> error $ show (typeOf x) ++ " : " ++ show args
+        args -> error $ "Can't decompose type: " ++ show (typeOf x)
 
 pool :: Pool
 pool = M.fromList [
