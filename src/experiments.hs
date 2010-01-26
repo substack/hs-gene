@@ -1,38 +1,44 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 -- ^ tries really hard to use monomorphic types
+-- todo: expand PolyTypeable to work with this
 
---import Data.PolyTypeable (polyTypeOf)
---import Data.PolyTypeable.Utils
-import Data.Typeable (TypeRep,typeOf,typeRepArgs)
-import Data.Dynamic (Dynamic,toDyn,fromDynamic,dynApp)
+import Data.Typeable (Typeable,TypeRep,typeOf,typeRepArgs)
+import Data.Dynamic (Dynamic,toDyn)
 
 import qualified Data.Map as M
 import Control.Arrow (second,(&&&))
+import Control.Monad (filterM)
 
-type Pool = M.Map String (TypeRep,Dynamic)
+type TypeTrans = (TypeRep,TypeRep)
+type TTFunc = (TypeTrans,Dynamic)
+type Pool = M.Map String TTFunc
+
+transOf :: Typeable a => a -> TypeTrans
+transOf x = (inT,outT) where
+    [inT,outT] = case typeRepArgs $ typeOf x of
+        xx@[_,_] -> xx
+        args -> error $ show (typeOf x) ++ " : " ++ show args
 
 pool :: Pool
 pool = M.fromList [
-        ("sin",(typeOf &&& toDyn $ sin)),
-        ("cos",(typeOf &&& toDyn $ cos)),
-        ("(+1)",(typeOf &&& toDyn $ (+1)))
+        ("sin",(transOf &&& toDyn $ sin)),
+        ("cos",(transOf &&& toDyn $ cos)),
+        ("(+1)",(transOf &&& toDyn $ (+1)))
     ]
 
-findPaths :: TypeRep -> TypeRep -> Pool -> [[String]]
-findPaths from to pool
-    | (from == to) && hasTo = [["id"]] ++ paths
-    | otherwise = paths
+findPaths :: TypeTrans -> Pool -> [[(String,TTFunc)]]
+findPaths (from,to) pool =
+    filter typesMatch
+    $ filter ((from ==) . fst . fst . snd . head)
+    $ filter ((to ==) . snd . fst . snd . last)
+    $ tail $ filterM (const [False,True])
+    $ M.assocs pool
+
+typesMatch :: [(String,TTFunc)] -> Bool
+typesMatch chain = all checker $ zip fx (tail fx)
     where
-        hasTo = elem to
-            $ map (head . typeRepArgs . fst)
-            $ M.elems pool
+        fx :: [TTFunc]
+        fx = map snd chain
         
-        paths = concatMap pathf $ M.keys pool
-        
-        pathf :: String -> [[String]]
-        pathf k = map (k :)
-            $ filter (not . null)
-            $ findPaths
-                (last . typeRepArgs . fst $ pool M.! k)
-                to
-                (M.delete k pool)
+        checker :: (TTFunc,TTFunc) -> Bool
+        checker ((x,_),(y,_)) = snd x == fst y
