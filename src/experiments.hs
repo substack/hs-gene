@@ -12,8 +12,6 @@
 -- ^ tries really hard to make everything use monomorphic types
 -- todo: expand PolyTypeable to work with this
 
-{-# LANGUAGE TypeSynonymInstances #-}
-
 import Data.Typeable (Typeable,TypeRep,typeOf,typeRepArgs)
 import Data.Dynamic (Dynamic,toDyn)
 
@@ -50,13 +48,14 @@ pool = M.fromList [
         t = transOf &&& toDyn
 
 findPaths :: TypeTrans -> Pool -> [TTChain]
+findPaths _ pool | M.null pool = []
 findPaths (from,to) pool =
     -- inner types agree:
     filter typesMatch
     -- outer types match up:
     $ filter ((from ==) . fst . fst . snd . head)
     $ filter ((to ==) . snd . fst . snd . last)
-    -- all possible chains (infinite):
+    -- breadth-first search of all possible chains (0 or infinitely many):
     $ concat [ replicateM n ax | n <- [1..]]
     where ax = M.assocs pool
 
