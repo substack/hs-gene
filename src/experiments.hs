@@ -48,7 +48,10 @@ pool = M.fromList [
         t = transOf &&& toDyn
 
 findPaths :: TypeTrans -> Pool -> [TTChain]
+-- early tests to return empty lists
 findPaths _ pool | M.null pool = []
+findPaths (t,_) pool | notElem t $ map (fst . fst) $ M.elems pool = []
+findPaths (_,t) pool | notElem t $ map (snd . fst) $ M.elems pool = []
 findPaths (from,to) pool =
     -- inner types agree:
     filter typesMatch
