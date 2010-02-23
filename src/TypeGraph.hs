@@ -10,24 +10,23 @@ import qualified Data.Map as M
 
 type TTChain = [(String,[TypeRep])]
 
-type Pool = M.Map String [TypeRep]
-
 typeReps :: TypeRep -> [TypeRep]
 typeReps t = case typeRepArgs t of
     [x,y] -> x : typeReps y
     [] -> [t]
 
-{-
+type Label = String
+(==>) :: Typeable a => Label -> a -> (Label,[TypeRep])
+label ==> t = (label, typeReps $ typeOf t)
+
+type Pool = M.Map Label [TypeRep]
 pool :: Pool
 pool = M.fromList [
-        ("sin",(t sin)),
-        ("cos",(t cos)),
-        ("tan",(t tan)),
-        ("atan2",(t atan2)),
-        --("acos",(t acos)),
-        ("succ",(t (succ :: Int -> Int))),
-        ("pred",(t (pred :: Int -> Int)))
-        --("(-1)",(t (-1)))
+        "sin" ==> sin,
+        "cos" ==> cos,
+        "tan" ==> tan,
+        "atan2" ==> atan2,
+        "succ" ==> (succ :: Int -> Int),
+        "pred" ==> (pred :: Int -> Int),
+        "0.0" ==> 0.0
     ]
-    where t = typeReps . typeOf
--}
