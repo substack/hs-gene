@@ -1,14 +1,12 @@
 {-# LANGUAGE ExtendedDefaultRules #-}
 
-import Data.Typeable (Typeable,TypeRep,typeOf,typeRepArgs,mkAppTy)
-import Data.Dynamic (Dynamic,toDyn)
-import Control.Arrow ((&&&))
-
+import Data.Typeable (Typeable,TypeRep,typeOf,typeRepArgs,typeRepKey)
 import Data.Graph.Class
-
 import qualified Data.Map as M
-
-type TTChain = [(String,[TypeRep])]
+import Control.Arrow ((***))
+import Control.Monad (join)
+import System.IO.Unsafe (unsafePerformIO)
+import Data.Ord (comparing)
 
 typeReps :: TypeRep -> [TypeRep]
 typeReps t = case typeRepArgs t of
@@ -28,5 +26,9 @@ pool = M.fromList [
         "atan2" ==> atan2,
         "succ" ==> (succ :: Int -> Int),
         "pred" ==> (pred :: Int -> Int),
-        "0.0" ==> 0.0
+        "0.0" ==> 0.0,
+        "0" ==> 0
     ]
+
+instance Ord TypeRep where
+    compare = comparing (unsafePerformIO . typeRepKey)
