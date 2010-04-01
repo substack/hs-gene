@@ -31,14 +31,12 @@ functions srcFile defs = runInterpreter $ do
     setImportsQ
         $ (name,Nothing)
         : ("Data.Typeable",Nothing)
+        : ("GHC.Err",Nothing)
         : imports
     
     mapM g =<< mapMaybe f <$> getModuleExports name
         where
-            typeRepExpr x =
-                "Data.Typeable.typeOf (undefined :: "
-                    ++ x
-                ++ ")"
+            typeRepExpr x = "Data.Typeable.typeOf (GHC.Err.undefined :: " ++ x ++ ")"
             interp x = interpret (typeRepExpr x) (as :: T.TypeRep)
             g x = ((,) x) <$> (interp =<< typeOf x)
             f (Fun x) = Just x
@@ -53,9 +51,14 @@ data ModuleInfo = ModuleInfo {
 
 info :: FilePath -> Defs -> IO ModuleInfo
 info srcFile defs = do
-    (=<< parseModule <$> preprocess srcFile defs) $ \m -> case m of
+    src <- preprocess srcFile defs
+    ($ parseModule src) $ \m -> case m of
         ParseFailed loc msg ->
-            fail $ show loc ++ ": " ++ msg
+            fail $ srcFile ++ " (preprocessed) : "
+                ++ (show $ srcLine loc) ++ "," ++ (show $ srcColumn loc) ++ "\n"
+                ++ msg
+                ++ '\n' : (lines src !! (srcLine loc - 1))
+                ++ '\n' : replicate (srcColumn loc - 1) ' ' ++ "^-- here\n"
         ParseOk (HsModule srcLoc (Module modName) mExports imports decls) ->
             return $ ModuleInfo { moduleImports = ims', moduleName = modName }
                 where
