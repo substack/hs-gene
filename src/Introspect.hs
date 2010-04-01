@@ -12,14 +12,17 @@ import Control.Monad.CatchIO
 
 import Data.Maybe (mapMaybe)
 import qualified Data.Typeable as T
+import qualified Data.PolyTypeable as T
 
 import System.Random
+import Data.Graph
 
 type Defs = [(String,String)]
+type Types = [(String,T.TypeRep)]
 
 functions :: (MonadCatchIO m, Functor m)
     => FilePath -> Defs
-    -> m (Either InterpreterError [(String, T.TypeRep)])
+    -> m (Either InterpreterError Types)
 functions srcFile defs = runInterpreter $ do
     loadModuleFromString =<< liftIO (preprocess srcFile defs)
     
@@ -31,16 +34,21 @@ functions srcFile defs = runInterpreter $ do
     setImportsQ
         $ (name,Nothing)
         : ("Data.Typeable",Nothing)
+        -- : ("Data.PolyTypeable",Nothing)
         : ("GHC.Err",Nothing)
         : imports
     
     mapM g =<< mapMaybe f <$> getModuleExports name
         where
             typeRepExpr x = "Data.Typeable.typeOf (GHC.Err.undefined :: " ++ x ++ ")"
+            --typeRepExpr x = "Data.PolyTypeable.polyTypeOf (GHC.Err.undefined :: " ++ x ++ ")"
             interp x = interpret (typeRepExpr x) (as :: T.TypeRep)
             g x = ((,) x) <$> (interp =<< typeOf x)
             f (Fun x) = Just x
             f _ = Nothing
+
+typeGraph :: Types -> Graph
+typeGraph types = undefined
 
 type ImportQ = (ModuleName,Maybe ModuleName)
 
