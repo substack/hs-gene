@@ -13,7 +13,6 @@ import Control.Monad.CatchIO
 import Data.Maybe (mapMaybe)
 import qualified Data.Typeable as T
 
-import System.Directory (copyFile)
 import System.Random
 
 type Defs = [(String,String)]
@@ -22,7 +21,7 @@ functions :: (MonadCatchIO m, Functor m)
     => FilePath -> Defs
     -> m (Either InterpreterError [(String, T.TypeRep)])
 functions srcFile defs = runInterpreter $ do
-    loadModuleFromString srcFile defs
+    loadModuleFromString =<< liftIO (preprocess srcFile defs)
     
     ModuleInfo {
         moduleImports = imports,
@@ -54,18 +53,18 @@ data ModuleInfo = ModuleInfo {
 
 info :: FilePath -> Defs -> IO ModuleInfo
 info srcFile defs = do
-    m <- parseModule <$> preprocess srcFile defs
-    let ParseOk (HsModule srcLoc (Module modName) mExports imports decls) = m
-        f = mName . importModule &&& (Just mName <*>) . importAs
-        mName (Module name) = name
-        ims = map f imports
-        ims' = if elem "Prelude" $ map fst ims
-            then ims
-            else ("Prelude",Nothing) : ims
-    return $ ModuleInfo {
-        moduleImports = ims',
-        moduleName = modName
-    }
+    (=<< parseModule <$> preprocess srcFile defs) $ \m -> case m of
+        ParseFailed loc msg ->
+            fail $ show loc ++ ": " ++ msg
+        ParseOk (HsModule srcLoc (Module modName) mExports imports decls) ->
+            return $ ModuleInfo { moduleImports = ims', moduleName = modName }
+                where
+                    f = mName . importModule &&& (Just mName <*>) . importAs
+                    mName (Module name) = name
+                    ims = map f imports
+                    ims' = if elem "Prelude" $ map fst ims
+                        then ims
+                        else ("Prelude",Nothing) : ims
 
 preprocess :: FilePath -> Defs -> IO String
 preprocess srcFile defs =
@@ -74,6 +73,10 @@ preprocess srcFile defs =
     =<< readFile srcFile
     where opts = C.defaultBoolOptions { C.locations = False }
 
-loadModuleFromString :: MonadInterpreter m => FilePath -> Defs -> m ()
-loadModuleFromString srcFile defs =
-    loadModules [srcFile]
+loadModuleFromString ::
+    (MonadInterpreter m, Functor m) => String -> m ()
+loadModuleFromString src = do
+    tmpFile <- ("/tmp/" ++) . (++ ".hs")
+        . take 12 . randomRs ('a','z') <$> liftIO newStdGen
+    liftIO $ writeFile tmpFile src
+    loadModules [tmpFile]
