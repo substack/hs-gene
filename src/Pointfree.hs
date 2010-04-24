@@ -1,3 +1,4 @@
+{-# LANGUAGE Rank2Types #-}
 module Main where
 
 import qualified Language.Haskell.Parser as H
@@ -12,7 +13,7 @@ import qualified Language.Haskell.Pointfree.Parser as PF
 
 import Control.Applicative ((<$>),(<*>))
 import Control.Arrow ((&&&))
-import Control.Monad (liftM2)
+import Control.Monad (liftM2,join)
 import Control.Monad.CatchIO
 import Control.Monad.Trans (liftIO)
 import System.Random (randomRs,newStdGen)
@@ -24,13 +25,21 @@ import qualified Data.PolyTypeable as T
 type Env = [(String,String)]
 type Types = [(String,T.TypeRep)]
 
-functions :: (MonadCatchIO m, Functor m)
-    => FilePath -> Env
-    -> m (Either H.InterpreterError Types)
-functions srcFile env = H.runInterpreter $ do
+type Interpreter a = (MonadCatchIO m, Functor m) => m (Either H.InterpreterError a)
+type InterpreterT a = (MonadCatchIO m, Functor m) => H.InterpreterT m a
+
+type ImportQ = (H.ModuleName,Maybe H.ModuleName)
+
+data ModuleInfo = ModuleInfo {
+    moduleImports :: [ImportQ],
+    moduleName :: H.ModuleName
+} deriving Show
+
+withModule :: FilePath -> Env -> (ModuleInfo -> InterpreterT a) -> Interpreter a
+withModule srcFile env f = H.runInterpreter $ do
     loadModuleFromString =<< liftIO (preprocess srcFile env)
     
-    ModuleInfo {
+    mInfo@ModuleInfo {
         moduleImports = imports,
         moduleName = name
     } <- liftIO (info srcFile env)
@@ -42,21 +51,19 @@ functions srcFile env = H.runInterpreter $ do
         : ("GHC.Err",Nothing)
         : imports
     
-    mapM g =<< mapMaybe f <$> H.getModuleExports name
-        where
-            typeRepExpr x = "Data.Typeable.typeOf (GHC.Err.undefined :: " ++ x ++ ")"
-            --typeRepExpr x = "Data.PolyTypeable.polyTypeOf (GHC.Err.undefined :: " ++ x ++ ")"
-            interp x = H.interpret (typeRepExpr x) (H.as :: T.TypeRep)
-            g x = ((,) x) <$> (interp =<< H.typeOf x)
-            f (H.Fun x) = Just x
-            f _ = Nothing
+    f mInfo
 
-type ImportQ = (H.ModuleName,Maybe H.ModuleName)
-
-data ModuleInfo = ModuleInfo {
-    moduleImports :: [ImportQ],
-    moduleName :: H.ModuleName
-} deriving Show
+functions :: FilePath -> Env -> Interpreter Types
+functions srcFile env = withModule srcFile env
+    $ \ModuleInfo{ moduleName = name } ->
+        mapM g =<< mapMaybe f <$> H.getModuleExports name
+    where
+        typeRepExpr x = "Data.Typeable.typeOf (GHC.Err.undefined :: " ++ x ++ ")"
+        --typeRepExpr x = "Data.PolyTypeable.polyTypeOf (GHC.Err.undefined :: " ++ x ++ ")"
+        interp x = H.interpret (typeRepExpr x) (H.as :: T.TypeRep)
+        g x = ((,) x) <$> (interp =<< H.typeOf x)
+        f (H.Fun x) = Just x
+        f _ = Nothing
 
 info :: FilePath -> Env -> IO ModuleInfo
 info srcFile env = do
