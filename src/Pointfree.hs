@@ -12,6 +12,7 @@ import qualified Language.Haskell.Pointfree.Parser as PF
 
 import Control.Applicative ((<$>),(<*>))
 import Control.Arrow ((&&&))
+import Control.Monad (liftM2)
 import Control.Monad.CatchIO
 import Control.Monad.Trans (liftIO)
 import System.Random (randomRs,newStdGen)
@@ -92,13 +93,21 @@ loadModuleFromString src = do
     liftIO $ writeFile tmpFile src
     H.loadModules [tmpFile]
 
--- | Break up an expression into all the possible pieces with type signatures
-pieces :: PF.Expr -> [PF.Expr]
-pieces e@PF.Var{} = [e]
-pieces e@(PF.Lambda pat expr) = e : pieces expr
-pieces e@(PF.App e1 e2) = e : (pieces e1 ++ pieces e2)
-pieces _ = error "what are lambdas doing in here still?"
--- call H.typeOf on the pieces with the interpereter
-
 topToExpr :: String -> PF.Expr
 topToExpr = (\(PF.TLE x) -> x) . (\(Right e) -> e) . pointfree
+
+-- | Break up an expression into all the possible pieces with type signatures
+update :: (PF.Expr -> PF.Expr) -> PF.Expr -> PF.Expr
+update f e@PF.Var{} = f e
+update f (PF.Lambda pat expr) = f $ PF.Lambda pat (update f expr)
+update f (PF.App e1 e2) = PF.App (update f e1) (update f e2)
+update f _ = error "Lambda encountered in update"
+
+updateM :: Monad m => (PF.Expr -> m PF.Expr) -> PF.Expr -> m PF.Expr
+updateM f e@PF.Var{} = f e
+updateM f (PF.Lambda pat expr) = (f . PF.Lambda pat) =<< updateM f expr
+updateM f (PF.App e1 e2) = liftM2 PF.App (updateM f e1) (updateM f e2)
+updateM f _ = error "Lambda encountered in update"
+
+-- TODO: call H.typeOf on the pieces with the interpereter
+-- updateM (\e -> do { print e; return $ case e of { (PF.Var f "2") -> PF.Var f "31337"; _ -> e } }) $ topToExpr "\\n -> n * 2 + 1"
