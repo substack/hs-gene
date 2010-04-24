@@ -1,15 +1,14 @@
 module Main where
 
--- the Exts module doesn't have Interpreter:
 import qualified Language.Haskell.Parser as H
 import qualified Language.Haskell.Syntax as H
 import qualified Language.Haskell.Pretty as H
 import qualified Language.Haskell.Interpreter as H
 import qualified Language.Preprocessor.Cpphs as C
 
--- hs2pf needs the Exts module:
-import qualified Language.Haskell.Exts.Syntax as E
-import qualified Language.Haskell.Exts.Parser as E
+import Language.Haskell.Pointfree (pointfree)
+import qualified Language.Haskell.Pointfree.Common as PF
+import qualified Language.Haskell.Pointfree.Parser as PF
 
 import Control.Applicative ((<$>),(<*>))
 import Control.Arrow ((&&&))
@@ -21,12 +20,8 @@ import Data.Maybe (mapMaybe)
 import qualified Data.Typeable as T
 import qualified Data.PolyTypeable as T
 
-import Language.Pointfree.Parser (hs2pf)
-
 type Env = [(String,String)]
 type Types = [(String,T.TypeRep)]
-
-
 
 functions :: (MonadCatchIO m, Functor m)
     => FilePath -> Env
@@ -96,3 +91,8 @@ loadModuleFromString src = do
         . take 12 . randomRs ('a','z') <$> liftIO newStdGen
     liftIO $ writeFile tmpFile src
     H.loadModules [tmpFile]
+
+-- | Break up a declaration into pieces
+pieces :: PF.Expr -> [PF.Expr]
+pieces exp = undefined
+-- call H.typeOf on the pieces with the interpereter
