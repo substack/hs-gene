@@ -92,7 +92,13 @@ loadModuleFromString src = do
     liftIO $ writeFile tmpFile src
     H.loadModules [tmpFile]
 
--- | Break up a declaration into pieces
+-- | Break up an expression into all the possible pieces with type signatures
 pieces :: PF.Expr -> [PF.Expr]
-pieces exp = undefined
+pieces e@PF.Var{} = [e]
+pieces e@(PF.Lambda pat expr) = e : pieces expr
+pieces e@(PF.App e1 e2) = e : (pieces e1 ++ pieces e2)
+pieces _ = error "what are lambdas doing in here still?"
 -- call H.typeOf on the pieces with the interpereter
+
+topToExpr :: String -> PF.Expr
+topToExpr = (\(PF.TLE x) -> x) . (\(Right e) -> e) . pointfree
