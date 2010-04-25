@@ -54,8 +54,8 @@ exports name = mapM f =<< (concatMap eId <$> H.getModuleExports name)
         
         eId :: H.ModuleElem -> [String]
         eId (H.Fun x) = [x]
+        eId (H.Class _ xs) = xs
         eId (H.Data _ xs) = xs
-        eId _ = []
 
 getInfo :: FilePath -> Env -> IO ModuleInfo
 getInfo srcFile env = do
@@ -67,7 +67,7 @@ getInfo srcFile env = do
                 ++ msg
                 ++ '\n' : (lines src !! (H.srcLine loc - 1))
                 ++ '\n' : replicate (H.srcColumn loc - 1) ' ' ++ "^-- here\n"
-        H.ParseOk (H.HsModule srcLoc (H.Module modName) mExports imports decls) ->
+        H.ParseOk (H.HsModule srcLoc (H.Module modName) mExports imports decls) -> do
             return $ ModuleInfo {
                     moduleImports = ims',
                     moduleName = modName,
@@ -105,9 +105,10 @@ update f (PF.Lambda pat expr) = f $ PF.Lambda pat (update f expr)
 update f (PF.App e1 e2) = f $ PF.App (update f e1) (update f e2)
 update f _ = error "Lambda encountered in update"
 
-updateM :: Monad m => (PF.Expr -> m PF.Expr) -> PF.Expr -> m PF.Expr
+updateM :: (Monad m, Functor m)
+    => (PF.Expr -> m PF.Expr) -> PF.Expr -> m PF.Expr
 updateM f e@PF.Var{} = f e
-updateM f (PF.Lambda pat expr) = (f . PF.Lambda pat) =<< updateM f expr
+updateM f (PF.Lambda pat expr) = f =<< (PF.Lambda pat <$> updateM f expr)
 updateM f (PF.App e1 e2) = f =<< liftM2 PF.App (updateM f e1) (updateM f e2)
 updateM f _ = error "Lambda encountered in update"
 
