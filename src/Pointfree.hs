@@ -84,19 +84,6 @@ getInfo srcFile = do
 unpoint :: String -> PF.Expr
 unpoint = (\(PF.TLE x) -> x) . (\(Right e) -> e) . pointfree
 
-update :: (PF.Expr -> PF.Expr) -> PF.Expr -> PF.Expr
-update f e@PF.Var{} = f e
-update f (PF.Lambda pat expr) = f $ PF.Lambda pat (update f expr)
-update f (PF.App e1 e2) = f $ PF.App (update f e1) (update f e2)
-update f _ = error "Let encountered in update"
-
-updateM :: (Monad m, Functor m)
-    => (PF.Expr -> m PF.Expr) -> PF.Expr -> m PF.Expr
-updateM f e@PF.Var{} = f e
-updateM f (PF.Lambda pat expr) = f =<< (PF.Lambda pat <$> updateM f expr)
-updateM f (PF.App e1 e2) = f =<< liftM2 PF.App (updateM f e1) (updateM f e2)
-updateM f _ = error "Let encountered in update"
-
 everyExp :: (Data a, Monad m) => a -> (a -> m a) -> m a
 everyExp x f = everywhereM (mkM f) x
 
