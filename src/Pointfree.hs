@@ -17,7 +17,7 @@ import Control.Monad.CatchIO
 import Control.Monad.Trans (liftIO)
 import System.Random (randomRIO,randomRs,newStdGen)
 
-import Data.Generics (everywhereM,mkM)
+import Data.Generics (Data(..),everywhereM,mkM)
 
 type Export = (String,String)
 
@@ -97,30 +97,35 @@ updateM f (PF.Lambda pat expr) = f =<< (PF.Lambda pat <$> updateM f expr)
 updateM f (PF.App e1 e2) = f =<< liftM2 PF.App (updateM f e1) (updateM f e2)
 updateM f _ = error "Let encountered in update"
 
-printSubTypes :: FilePath -> String -> IO ()
+everyExp :: (Data a, Monad m) => a -> (a -> m a) -> m a
+everyExp x f = everywhereM (mkM f) x
+
+everyExp_ :: (Data a, Monad m) => a -> (a -> m ()) -> m ()
+everyExp_ x f = everywhereM (mkM $ \d -> f d >> return d) x
+    >> return ()
+
+printSubTypes :: FilePath -> String -> Interpreter ()
 printSubTypes srcFile expr = do
     let imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
-    withModule srcFile imports $ \_ -> do
-        (flip updateM $ unpoint expr) $ \e -> do
+    withModule srcFile imports $ \info -> everyExp_ (unpoint expr)
+        $ \e -> do
+        -- printer :: ModuleInfo -> PF.Expr -> InterpreterT ()
+        -- printer info e = do
             t <- H.typeOf $ show e
             liftIO $ putStrLn $ show e ++ " :: " ++ t
-            return e
-    return ()
 
-
-printMatches :: FilePath -> String -> IO ()
+printMatches :: FilePath -> String -> Interpreter ()
 printMatches srcFile expr = do
     let imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
-        printer :: ModuleInfo -> PF.Expr -> InterpreterT ()
-        printer info e = do
+    withModule srcFile imports $ \info -> everyExp_ (unpoint expr)
+        $ \e -> do
+        --printer :: ModuleInfo -> PF.Expr -> InterpreterT ()
+        --printer info e = do
             t <- H.typeOf $ show e
             let matches = [ name | (name,eType) <- moduleExports info,
                     eType == t, name /= show e ]
             liftIO $ putStrLn
                 $ show e ++ " :: " ++ t ++ " => " ++ show matches
-    withModule srcFile imports $ \info ->
-        everywhereM (mkM $ \x -> printer info x >> return x) (unpoint expr)
-    return ()
 
 mutate :: FilePath -> String -> Interpreter String
 mutate srcFile expr = withModule srcFile imports $ \info -> do
