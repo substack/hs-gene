@@ -35,26 +35,21 @@ data ModuleInfo = ModuleInfo {
     moduleName :: H.ModuleName
 } deriving Show
 
-withModule :: FilePath -> Env -> (ModuleInfo -> InterpreterT a) -> Interpreter a
-withModule srcFile env f = H.runInterpreter $ do
+withModule :: FilePath -> Env -> [ImportQ]
+    -> (ModuleInfo -> InterpreterT a) -> Interpreter a
+withModule srcFile env imports f = H.runInterpreter $ do
     loadModuleFromString =<< liftIO (preprocess srcFile env)
     
     mInfo@ModuleInfo {
-        moduleImports = imports,
+        moduleImports = mImports,
         moduleName = name
     } <- liftIO (info srcFile env)
     
-    H.setImportsQ
-        $ (name,Nothing)
-        : ("Data.Typeable",Nothing)
-        -- : ("Data.PolyTypeable",Nothing)
-        : ("GHC.Err",Nothing)
-        : imports
-    
+    H.setImportsQ $ (name,Nothing) : imports ++ mImports
     f mInfo
 
 functions :: FilePath -> Env -> Interpreter Types
-functions srcFile env = withModule srcFile env
+functions srcFile env = withModule srcFile env imports
     $ \ModuleInfo{ moduleName = name } ->
         mapM g =<< mapMaybe f <$> H.getModuleExports name
     where
@@ -64,6 +59,7 @@ functions srcFile env = withModule srcFile env
         g x = ((,) x) <$> (interp =<< H.typeOf x)
         f (H.Fun x) = Just x
         f _ = Nothing
+        imports = [("Data.Typeable",Nothing),("GHC.Err",Nothing)]
 
 info :: FilePath -> Env -> IO ModuleInfo
 info srcFile env = do
@@ -124,11 +120,12 @@ mutate path env pool name = undefined
 --printTypes srcFile env = withModule srcFile env $ \_ -> updateM return
 
 printSubTypes :: FilePath -> Env -> String -> Interpreter PF.Expr
-printSubTypes srcFile env expr = withModule srcFile env
+printSubTypes srcFile env expr = withModule srcFile env imports
     $ \_ -> (flip updateM $ topToExpr expr)
     $ \e -> do
         t <- H.typeOf $ show e
         liftIO $ putStrLn $ show e ++ " :: " ++ t
         return e
+    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
 -- updateM (\e -> do { print e; return $ case e of { (PF.Var f "2") -> PF.Var f "31337"; _ -> e } }) $ topToExpr "\\n -> n * 2 + 1"
