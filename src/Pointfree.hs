@@ -47,15 +47,15 @@ withModule srcFile env imports f = H.runInterpreter $ do
     f $ mInfo { moduleExports = exps }
 
 exports :: H.Id -> InterpreterT [(String,String)]
-exports name = mapM f =<< (concatMap eId <$> H.getModuleExports name)
+exports name = mapM f =<< (concatMap ids <$> H.getModuleExports name)
     where
         f :: String -> InterpreterT (String,String)
         f x = ((,) x) <$> H.typeOf x
         
-        eId :: H.ModuleElem -> [String]
-        eId (H.Fun x) = [x]
-        eId (H.Class _ xs) = xs
-        eId (H.Data _ xs) = xs
+        ids :: H.ModuleElem -> [String]
+        ids (H.Fun x) = [x]
+        ids (H.Class _ xs) = xs
+        ids (H.Data _ xs) = xs
 
 getInfo :: FilePath -> Env -> IO ModuleInfo
 getInfo srcFile env = do
