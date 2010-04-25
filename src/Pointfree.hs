@@ -1,9 +1,9 @@
 {-# LANGUAGE Rank2Types #-}
 module Main where
 
-import qualified Language.Haskell.Parser as H
-import qualified Language.Haskell.Syntax as H
-import qualified Language.Haskell.Pretty as H
+import qualified Language.Haskell.Parser as LH
+import qualified Language.Haskell.Syntax as LH
+import qualified Language.Haskell.Pretty as LH
 import qualified Language.Haskell.Interpreter as H
 
 import Language.Haskell.Pointfree (pointfree)
@@ -59,22 +59,22 @@ exports name = mapM f =<< (concatMap ids <$> H.getModuleExports name)
 getInfo :: FilePath -> IO ModuleInfo
 getInfo srcFile = do
     src <- readFile srcFile
-    ($ H.parseModule src) $ \m -> case m of
-        H.ParseFailed loc msg ->
+    ($ LH.parseModule src) $ \m -> case m of
+        LH.ParseFailed loc msg ->
             fail $ srcFile ++ " (preprocessed) : "
-                ++ (show $ H.srcLine loc) ++ "," ++ (show $ H.srcColumn loc) ++ "\n"
+                ++ (show $ LH.srcLine loc) ++ "," ++ (show $ LH.srcColumn loc) ++ "\n"
                 ++ msg
-                ++ '\n' : (lines src !! (H.srcLine loc - 1))
-                ++ '\n' : replicate (H.srcColumn loc - 1) ' ' ++ "^-- here\n"
-        H.ParseOk (H.HsModule srcLoc (H.Module modName) mExports imports decls) -> do
+                ++ '\n' : (lines src !! (LH.srcLine loc - 1))
+                ++ '\n' : replicate (LH.srcColumn loc - 1) ' ' ++ "^-- here\n"
+        LH.ParseOk (LH.HsModule srcLoc (LH.Module modName) mExports imports decls) -> do
             return $ ModuleInfo {
                     moduleImports = ims',
                     moduleName = modName,
                     moduleExports = undefined
                 }
                 where
-                    f = mName . H.importModule &&& (Just mName <*>) . H.importAs
-                    mName (H.Module name) = name
+                    f = mName . LH.importModule &&& (Just mName <*>) . LH.importAs
+                    mName (LH.Module name) = name
                     ims = map f imports
                     ims' = if elem "Prelude" $ map fst ims
                         then ims
