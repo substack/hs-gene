@@ -105,36 +105,32 @@ everyExp_ x f = everywhereM (mkM $ \d -> f d >> return d) x
     >> return ()
 
 printSubTypes :: FilePath -> String -> Interpreter ()
-printSubTypes srcFile expr = do
-    let imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+printSubTypes srcFile expr =
     withModule srcFile imports $ \info -> everyExp_ (unpoint expr)
         $ \e -> do
-        -- printer :: ModuleInfo -> PF.Expr -> InterpreterT ()
-        -- printer info e = do
             t <- H.typeOf $ show e
             liftIO $ putStrLn $ show e ++ " :: " ++ t
+    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
 printMatches :: FilePath -> String -> Interpreter ()
-printMatches srcFile expr = do
-    let imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+printMatches srcFile expr =
     withModule srcFile imports $ \info -> everyExp_ (unpoint expr)
         $ \e -> do
-        --printer :: ModuleInfo -> PF.Expr -> InterpreterT ()
-        --printer info e = do
             t <- H.typeOf $ show e
             let matches = [ name | (name,eType) <- moduleExports info,
                     eType == t, name /= show e ]
             liftIO $ putStrLn
                 $ show e ++ " :: " ++ t ++ " => " ++ show matches
+    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
-mutate :: FilePath -> String -> Interpreter String
-mutate srcFile expr = withModule srcFile imports $ \info -> do
-    expr' <- (flip updateM $ unpoint expr) $ \e -> do
-        t <- H.typeOf $ show e
-        let matches = show e : [ name | (name,eType) <- moduleExports info,
-                eType == t, name /= show e ]
-        i <- liftIO $ randomRIO (0, length matches - 1)
-        liftIO $ print (i,t,matches)
-        return $ unpoint $ matches !! i
-    return $ show expr'
+mutate :: FilePath -> String -> IO String
+mutate srcFile expr = 
+    (show <$>) . withModule srcFile imports $ \info -> everyExp (unpoint expr)
+        $ \e -> do
+            t <- H.typeOf $ show e
+            let matches = show e : [ name | (name,eType) <- moduleExports info,
+                    eType == t, name /= show e ]
+            i <- liftIO $ randomRIO (0, length matches - 1)
+            liftIO $ print (i,t,matches)
+            return $ unpoint $ matches !! i
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
