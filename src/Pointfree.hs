@@ -23,7 +23,7 @@ import qualified Data.Typeable as T
 import qualified Data.PolyTypeable as T
 
 type Env = [(String,String)]
-type Types = [(String,T.TypeRep)]
+type Export = (String,String)
 
 type Interpreter a = (MonadCatchIO m, Functor m) => m (Either H.InterpreterError a)
 type InterpreterT a = (MonadCatchIO m, Functor m) => H.InterpreterT m a
@@ -32,6 +32,7 @@ type ImportQ = (H.ModuleName,Maybe H.ModuleName)
 
 data ModuleInfo = ModuleInfo {
     moduleImports :: [ImportQ],
+    moduleExports :: [Export],
     moduleName :: H.ModuleName
 } deriving Show
 
@@ -46,11 +47,11 @@ withModule srcFile env imports f = H.runInterpreter $ do
     } <- liftIO (getInfo srcFile env)
     
     H.setImportsQ $ (name,Nothing) : imports ++ mImports
-    f mInfo
+    exps <- exports name
+    f $ mInfo { moduleExports = exps }
 
-exports :: ModuleInfo -> InterpreterT [(String,String)]
-exports ModuleInfo{ moduleName = name } =
-    mapM f =<< (concatMap eId <$> H.getModuleExports name)
+exports :: H.Id -> InterpreterT [(String,String)]
+exports name = mapM f =<< (concatMap eId <$> H.getModuleExports name)
     where
         f :: String -> InterpreterT (String,String)
         f x = ((,) x) <$> H.typeOf x
@@ -71,7 +72,11 @@ getInfo srcFile env = do
                 ++ '\n' : (lines src !! (H.srcLine loc - 1))
                 ++ '\n' : replicate (H.srcColumn loc - 1) ' ' ++ "^-- here\n"
         H.ParseOk (H.HsModule srcLoc (H.Module modName) mExports imports decls) ->
-            return $ ModuleInfo { moduleImports = ims', moduleName = modName }
+            return $ ModuleInfo {
+                    moduleImports = ims',
+                    moduleName = modName,
+                    moduleExports = undefined
+                }
                 where
                     f = mName . H.importModule &&& (Just mName <*>) . H.importAs
                     mName (H.Module name) = name
@@ -120,18 +125,11 @@ printSubTypes srcFile env expr = withModule srcFile env imports
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
 printMatches :: FilePath -> Env -> String -> Interpreter PF.Expr
-printMatches srcFile env expr = withModule srcFile env imports $ \_ -> do
+printMatches srcFile env expr = withModule srcFile env imports $ \info -> do
+    liftIO $ print $ moduleExports info
     (flip updateM $ topToExpr expr) $ \e -> do
         t <- H.typeOf $ show e
-        let matches = undefined
+        let matches = []
         liftIO $ putStrLn $ show e ++ " :: " ++ t ++ " => " ++ matches
         return e
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
-
--- | Mutate a top-level declaration
-mutate :: MonadCatchIO m => FilePath -> Env -> Types -> String
-    -> m (Either H.InterpreterError PF.Expr)
-mutate path env pool name = undefined
-
---printTypes :: FilePath -> Env -> Interpreter PF.Expr
---printTypes srcFile env = withModule srcFile env $ \_ -> updateM return
