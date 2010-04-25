@@ -106,13 +106,13 @@ topToExpr = (\(PF.TLE x) -> x) . (\(Right e) -> e) . pointfree
 update :: (PF.Expr -> PF.Expr) -> PF.Expr -> PF.Expr
 update f e@PF.Var{} = f e
 update f (PF.Lambda pat expr) = f $ PF.Lambda pat (update f expr)
-update f (PF.App e1 e2) = PF.App (update f e1) (update f e2)
+update f (PF.App e1 e2) = f $ PF.App (update f e1) (update f e2)
 update f _ = error "Lambda encountered in update"
 
 updateM :: Monad m => (PF.Expr -> m PF.Expr) -> PF.Expr -> m PF.Expr
 updateM f e@PF.Var{} = f e
 updateM f (PF.Lambda pat expr) = (f . PF.Lambda pat) =<< updateM f expr
-updateM f (PF.App e1 e2) = liftM2 PF.App (updateM f e1) (updateM f e2)
+updateM f (PF.App e1 e2) = f =<< liftM2 PF.App (updateM f e1) (updateM f e2)
 updateM f _ = error "Lambda encountered in update"
 
 -- | Mutate a top-level declaration
@@ -120,5 +120,15 @@ mutate :: MonadCatchIO m => FilePath -> Env -> Types -> String
     -> m (Either H.InterpreterError PF.Expr)
 mutate path env pool name = undefined
 
--- TODO: call H.typeOf on the pieces with the interpereter
+--printTypes :: FilePath -> Env -> Interpreter PF.Expr
+--printTypes srcFile env = withModule srcFile env $ \_ -> updateM return
+
+printSubTypes :: FilePath -> Env -> String -> Interpreter PF.Expr
+printSubTypes srcFile env expr = withModule srcFile env
+    $ \_ -> (flip updateM $ topToExpr expr)
+    $ \e -> do
+        t <- H.typeOf $ show e
+        liftIO $ putStrLn $ show e ++ " :: " ++ t
+        return e
+
 -- updateM (\e -> do { print e; return $ case e of { (PF.Var f "2") -> PF.Var f "31337"; _ -> e } }) $ topToExpr "\\n -> n * 2 + 1"
