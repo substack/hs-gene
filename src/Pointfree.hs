@@ -126,10 +126,10 @@ printSubTypes srcFile env expr = withModule srcFile env imports
 
 printMatches :: FilePath -> Env -> String -> Interpreter PF.Expr
 printMatches srcFile env expr = withModule srcFile env imports $ \info -> do
-    liftIO $ print $ moduleExports info
     (flip updateM $ topToExpr expr) $ \e -> do
         t <- H.typeOf $ show e
-        let matches = []
-        liftIO $ putStrLn $ show e ++ " :: " ++ t ++ " => " ++ matches
+        let matches = [ name | (name,eType) <- moduleExports info,
+                eType == t, name /= show e ]
+        liftIO $ putStrLn $ show e ++ " :: " ++ t ++ " => " ++ show matches
         return e
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
