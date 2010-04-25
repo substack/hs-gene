@@ -16,11 +16,7 @@ import Control.Arrow ((&&&),second)
 import Control.Monad (liftM2,join)
 import Control.Monad.CatchIO
 import Control.Monad.Trans (liftIO)
-import System.Random (randomRs,newStdGen)
-
-import Data.Maybe (mapMaybe)
-import qualified Data.Typeable as T
-import qualified Data.PolyTypeable as T
+import System.Random (randomRIO,randomRs,newStdGen)
 
 type Env = [(String,String)]
 type Export = (String,String)
@@ -100,8 +96,8 @@ loadModuleFromString src = do
     liftIO $ writeFile tmpFile src
     H.loadModules [tmpFile]
 
-topToExpr :: String -> PF.Expr
-topToExpr = (\(PF.TLE x) -> x) . (\(Right e) -> e) . pointfree
+unpoint :: String -> PF.Expr
+unpoint = (\(PF.TLE x) -> x) . (\(Right e) -> e) . pointfree
 
 update :: (PF.Expr -> PF.Expr) -> PF.Expr -> PF.Expr
 update f e@PF.Var{} = f e
@@ -117,7 +113,7 @@ updateM f _ = error "Lambda encountered in update"
 
 printSubTypes :: FilePath -> Env -> String -> Interpreter PF.Expr
 printSubTypes srcFile env expr = withModule srcFile env imports
-    $ \_ -> (flip updateM $ topToExpr expr)
+    $ \_ -> (flip updateM $ unpoint expr)
     $ \e -> do
         t <- H.typeOf $ show e
         liftIO $ putStrLn $ show e ++ " :: " ++ t
@@ -126,10 +122,22 @@ printSubTypes srcFile env expr = withModule srcFile env imports
 
 printMatches :: FilePath -> Env -> String -> Interpreter PF.Expr
 printMatches srcFile env expr = withModule srcFile env imports $ \info -> do
-    (flip updateM $ topToExpr expr) $ \e -> do
+    (flip updateM $ unpoint expr) $ \e -> do
         t <- H.typeOf $ show e
         let matches = [ name | (name,eType) <- moduleExports info,
                 eType == t, name /= show e ]
         liftIO $ putStrLn $ show e ++ " :: " ++ t ++ " => " ++ show matches
         return e
+    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+
+mutate :: FilePath -> Env -> String -> Interpreter String
+mutate srcFile env expr = withModule srcFile env imports $ \info -> do
+    expr' <- (flip updateM $ unpoint expr) $ \e -> do
+        t <- H.typeOf $ show e
+        let matches = show e : [ name | (name,eType) <- moduleExports info,
+                eType == t, name /= show e ]
+        i <- liftIO $ randomRIO (0, length matches - 1)
+        liftIO $ print (i,t,matches)
+        return $ unpoint $ matches !! i
+    return $ show expr'
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
