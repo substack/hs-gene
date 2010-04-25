@@ -95,24 +95,27 @@ updateM f (PF.Lambda pat expr) = f =<< (PF.Lambda pat <$> updateM f expr)
 updateM f (PF.App e1 e2) = f =<< liftM2 PF.App (updateM f e1) (updateM f e2)
 updateM f _ = error "Lambda encountered in update"
 
-printSubTypes :: FilePath -> String -> Interpreter PF.Expr
-printSubTypes srcFile expr = withModule srcFile imports
-    $ \_ -> (flip updateM $ unpoint expr)
-    $ \e -> do
-        t <- H.typeOf $ show e
-        liftIO $ putStrLn $ show e ++ " :: " ++ t
-        return e
-    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+printSubTypes :: FilePath -> String -> IO ()
+printSubTypes srcFile expr = do
+    let imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+    withModule srcFile imports $ \_ -> do
+        (flip updateM $ unpoint expr) $ \e -> do
+            t <- H.typeOf $ show e
+            liftIO $ putStrLn $ show e ++ " :: " ++ t
+            return e
+    return ()
 
-printMatches :: FilePath -> String -> Interpreter PF.Expr
-printMatches srcFile expr = withModule srcFile imports $ \info -> do
-    (flip updateM $ unpoint expr) $ \e -> do
-        t <- H.typeOf $ show e
-        let matches = [ name | (name,eType) <- moduleExports info,
-                eType == t, name /= show e ]
-        liftIO $ putStrLn $ show e ++ " :: " ++ t ++ " => " ++ show matches
-        return e
-    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+printMatches :: FilePath -> String -> IO ()
+printMatches srcFile expr = do
+    let imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+    withModule srcFile imports $ \info -> do
+        (flip updateM $ unpoint expr) $ \e -> do
+            t <- H.typeOf $ show e
+            let matches = [ name | (name,eType) <- moduleExports info,
+                    eType == t, name /= show e ]
+            liftIO $ putStrLn $ show e ++ " :: " ++ t ++ " => " ++ show matches
+            return e
+    return ()
 
 mutate :: FilePath -> String -> Interpreter String
 mutate srcFile expr = withModule srcFile imports $ \info -> do
