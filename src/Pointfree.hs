@@ -5,7 +5,6 @@ import qualified Language.Haskell.Parser as H
 import qualified Language.Haskell.Syntax as H
 import qualified Language.Haskell.Pretty as H
 import qualified Language.Haskell.Interpreter as H
-import qualified Language.Preprocessor.Cpphs as C
 
 import Language.Haskell.Pointfree (pointfree)
 import qualified Language.Haskell.Pointfree.Common as PF
@@ -35,12 +34,12 @@ data ModuleInfo = ModuleInfo {
 withModule :: FilePath -> Env -> [ImportQ]
     -> (ModuleInfo -> InterpreterT a) -> Interpreter a
 withModule srcFile env imports f = H.runInterpreter $ do
-    loadModuleFromString =<< liftIO (preprocess srcFile env)
+    H.loadModules [srcFile]
     
     mInfo@ModuleInfo {
         moduleImports = mImports,
         moduleName = name
-    } <- liftIO (getInfo srcFile env)
+    } <- liftIO (getInfo srcFile)
     
     H.setImportsQ $ (name,Nothing) : imports ++ mImports
     exps <- exports name
@@ -57,9 +56,9 @@ exports name = mapM f =<< (concatMap ids <$> H.getModuleExports name)
         ids (H.Class _ xs) = xs
         ids (H.Data _ xs) = xs
 
-getInfo :: FilePath -> Env -> IO ModuleInfo
-getInfo srcFile env = do
-    src <- preprocess srcFile env
+getInfo :: FilePath -> IO ModuleInfo
+getInfo srcFile = do
+    src <- readFile srcFile
     ($ H.parseModule src) $ \m -> case m of
         H.ParseFailed loc msg ->
             fail $ srcFile ++ " (preprocessed) : "
@@ -80,21 +79,6 @@ getInfo srcFile env = do
                     ims' = if elem "Prelude" $ map fst ims
                         then ims
                         else ("Prelude",Nothing) : ims
-
-preprocess :: FilePath -> Env -> IO String
-preprocess srcFile env =
-    C.macroPass env opts
-    =<< C.cppIfdef srcFile env [] opts
-    =<< readFile srcFile
-    where opts = C.defaultBoolOptions { C.locations = False }
-
-loadModuleFromString ::
-    (H.MonadInterpreter m, Functor m) => String -> m ()
-loadModuleFromString src = do
-    tmpFile <- ("/tmp/" ++) . (++ ".hs")
-        . take 12 . randomRs ('a','z') <$> liftIO newStdGen
-    liftIO $ writeFile tmpFile src
-    H.loadModules [tmpFile]
 
 unpoint :: String -> PF.Expr
 unpoint = (\(PF.TLE x) -> x) . (\(Right e) -> e) . pointfree
