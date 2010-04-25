@@ -17,7 +17,6 @@ import Control.Monad.CatchIO
 import Control.Monad.Trans (liftIO)
 import System.Random (randomRIO,randomRs,newStdGen)
 
-type Env = [(String,String)]
 type Export = (String,String)
 
 type Interpreter a = (MonadCatchIO m, Functor m) => m (Either H.InterpreterError a)
@@ -31,9 +30,9 @@ data ModuleInfo = ModuleInfo {
     moduleName :: H.ModuleName
 } deriving Show
 
-withModule :: FilePath -> Env -> [ImportQ]
+withModule :: FilePath -> [ImportQ]
     -> (ModuleInfo -> InterpreterT a) -> Interpreter a
-withModule srcFile env imports f = H.runInterpreter $ do
+withModule srcFile imports f = H.runInterpreter $ do
     H.loadModules [srcFile]
     
     mInfo@ModuleInfo {
@@ -96,8 +95,8 @@ updateM f (PF.Lambda pat expr) = f =<< (PF.Lambda pat <$> updateM f expr)
 updateM f (PF.App e1 e2) = f =<< liftM2 PF.App (updateM f e1) (updateM f e2)
 updateM f _ = error "Lambda encountered in update"
 
-printSubTypes :: FilePath -> Env -> String -> Interpreter PF.Expr
-printSubTypes srcFile env expr = withModule srcFile env imports
+printSubTypes :: FilePath -> String -> Interpreter PF.Expr
+printSubTypes srcFile expr = withModule srcFile imports
     $ \_ -> (flip updateM $ unpoint expr)
     $ \e -> do
         t <- H.typeOf $ show e
@@ -105,8 +104,8 @@ printSubTypes srcFile env expr = withModule srcFile env imports
         return e
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
-printMatches :: FilePath -> Env -> String -> Interpreter PF.Expr
-printMatches srcFile env expr = withModule srcFile env imports $ \info -> do
+printMatches :: FilePath -> String -> Interpreter PF.Expr
+printMatches srcFile expr = withModule srcFile imports $ \info -> do
     (flip updateM $ unpoint expr) $ \e -> do
         t <- H.typeOf $ show e
         let matches = [ name | (name,eType) <- moduleExports info,
@@ -115,8 +114,8 @@ printMatches srcFile env expr = withModule srcFile env imports $ \info -> do
         return e
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
-mutate :: FilePath -> Env -> String -> Interpreter String
-mutate srcFile env expr = withModule srcFile env imports $ \info -> do
+mutate :: FilePath -> String -> Interpreter String
+mutate srcFile expr = withModule srcFile imports $ \info -> do
     expr' <- (flip updateM $ unpoint expr) $ \e -> do
         t <- H.typeOf $ show e
         let matches = show e : [ name | (name,eType) <- moduleExports info,
