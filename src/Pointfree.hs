@@ -12,7 +12,7 @@ import qualified Language.Haskell.Pointfree.Common as PF
 import qualified Language.Haskell.Pointfree.Parser as PF
 
 import Control.Applicative ((<$>),(<*>))
-import Control.Arrow ((&&&))
+import Control.Arrow ((&&&),second)
 import Control.Monad (liftM2,join)
 import Control.Monad.CatchIO
 import Control.Monad.Trans (liftIO)
@@ -43,26 +43,25 @@ withModule srcFile env imports f = H.runInterpreter $ do
     mInfo@ModuleInfo {
         moduleImports = mImports,
         moduleName = name
-    } <- liftIO (info srcFile env)
+    } <- liftIO (getInfo srcFile env)
     
     H.setImportsQ $ (name,Nothing) : imports ++ mImports
     f mInfo
 
-functions :: FilePath -> Env -> Interpreter Types
-functions srcFile env = withModule srcFile env imports
-    $ \ModuleInfo{ moduleName = name } ->
-        mapM g =<< mapMaybe f <$> H.getModuleExports name
+exports :: ModuleInfo -> InterpreterT [(String,String)]
+exports ModuleInfo{ moduleName = name } =
+    mapM f =<< (concatMap eId <$> H.getModuleExports name)
     where
-        typeRepExpr x = "Data.Typeable.typeOf (GHC.Err.undefined :: " ++ x ++ ")"
-        --typeRepExpr x = "Data.PolyTypeable.polyTypeOf (GHC.Err.undefined :: " ++ x ++ ")"
-        interp x = H.interpret (typeRepExpr x) (H.as :: T.TypeRep)
-        g x = ((,) x) <$> (interp =<< H.typeOf x)
-        f (H.Fun x) = Just x
-        f _ = Nothing
-        imports = [("Data.Typeable",Nothing),("GHC.Err",Nothing)]
+        f :: String -> InterpreterT (String,String)
+        f x = ((,) x) <$> H.typeOf x
+        
+        eId :: H.ModuleElem -> [String]
+        eId (H.Fun x) = [x]
+        eId (H.Data _ xs) = xs
+        eId _ = []
 
-info :: FilePath -> Env -> IO ModuleInfo
-info srcFile env = do
+getInfo :: FilePath -> Env -> IO ModuleInfo
+getInfo srcFile env = do
     src <- preprocess srcFile env
     ($ H.parseModule src) $ \m -> case m of
         H.ParseFailed loc msg ->
@@ -111,14 +110,6 @@ updateM f (PF.Lambda pat expr) = (f . PF.Lambda pat) =<< updateM f expr
 updateM f (PF.App e1 e2) = f =<< liftM2 PF.App (updateM f e1) (updateM f e2)
 updateM f _ = error "Lambda encountered in update"
 
--- | Mutate a top-level declaration
-mutate :: MonadCatchIO m => FilePath -> Env -> Types -> String
-    -> m (Either H.InterpreterError PF.Expr)
-mutate path env pool name = undefined
-
---printTypes :: FilePath -> Env -> Interpreter PF.Expr
---printTypes srcFile env = withModule srcFile env $ \_ -> updateM return
-
 printSubTypes :: FilePath -> Env -> String -> Interpreter PF.Expr
 printSubTypes srcFile env expr = withModule srcFile env imports
     $ \_ -> (flip updateM $ topToExpr expr)
@@ -128,4 +119,19 @@ printSubTypes srcFile env expr = withModule srcFile env imports
         return e
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
--- updateM (\e -> do { print e; return $ case e of { (PF.Var f "2") -> PF.Var f "31337"; _ -> e } }) $ topToExpr "\\n -> n * 2 + 1"
+printMatches :: FilePath -> Env -> String -> Interpreter PF.Expr
+printMatches srcFile env expr = withModule srcFile env imports $ \_ -> do
+    (flip updateM $ topToExpr expr) $ \e -> do
+        t <- H.typeOf $ show e
+        let matches = undefined
+        liftIO $ putStrLn $ show e ++ " :: " ++ t ++ " => " ++ matches
+        return e
+    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+
+-- | Mutate a top-level declaration
+mutate :: MonadCatchIO m => FilePath -> Env -> Types -> String
+    -> m (Either H.InterpreterError PF.Expr)
+mutate path env pool name = undefined
+
+--printTypes :: FilePath -> Env -> Interpreter PF.Expr
+--printTypes srcFile env = withModule srcFile env $ \_ -> updateM return
