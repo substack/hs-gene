@@ -17,6 +17,8 @@ import Control.Monad.CatchIO
 import Control.Monad.Trans (liftIO)
 import System.Random (randomRIO,randomRs,newStdGen)
 
+import Data.Generics (everywhereM,mkM)
+
 type Export = (String,String)
 
 type Interpreter a = (MonadCatchIO m, Functor m) => m (Either H.InterpreterError a)
@@ -86,14 +88,14 @@ update :: (PF.Expr -> PF.Expr) -> PF.Expr -> PF.Expr
 update f e@PF.Var{} = f e
 update f (PF.Lambda pat expr) = f $ PF.Lambda pat (update f expr)
 update f (PF.App e1 e2) = f $ PF.App (update f e1) (update f e2)
-update f _ = error "Lambda encountered in update"
+update f _ = error "Let encountered in update"
 
 updateM :: (Monad m, Functor m)
     => (PF.Expr -> m PF.Expr) -> PF.Expr -> m PF.Expr
 updateM f e@PF.Var{} = f e
 updateM f (PF.Lambda pat expr) = f =<< (PF.Lambda pat <$> updateM f expr)
 updateM f (PF.App e1 e2) = f =<< liftM2 PF.App (updateM f e1) (updateM f e2)
-updateM f _ = error "Lambda encountered in update"
+updateM f _ = error "Let encountered in update"
 
 printSubTypes :: FilePath -> String -> IO ()
 printSubTypes srcFile expr = do
@@ -105,16 +107,19 @@ printSubTypes srcFile expr = do
             return e
     return ()
 
+
 printMatches :: FilePath -> String -> IO ()
 printMatches srcFile expr = do
     let imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
-    withModule srcFile imports $ \info -> do
-        (flip updateM $ unpoint expr) $ \e -> do
+        printer :: ModuleInfo -> PF.Expr -> InterpreterT ()
+        printer info e = do
             t <- H.typeOf $ show e
             let matches = [ name | (name,eType) <- moduleExports info,
                     eType == t, name /= show e ]
-            liftIO $ putStrLn $ show e ++ " :: " ++ t ++ " => " ++ show matches
-            return e
+            liftIO $ putStrLn
+                $ show e ++ " :: " ++ t ++ " => " ++ show matches
+    withModule srcFile imports $ \info ->
+        everywhereM (mkM $ \x -> printer info x >> return x) (unpoint expr)
     return ()
 
 mutate :: FilePath -> String -> Interpreter String
