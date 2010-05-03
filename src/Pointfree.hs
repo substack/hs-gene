@@ -124,16 +124,23 @@ mutate srcFile expr =
             return $ unpoint $ matches !! i
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
-type ClassedVar = (String,[String])
-data TypeSig = TypeVar ClassedVar | TypeFun TypeSig | TypeCon String
+type ClassVar = [(String,Integer)]
+type ClassVars = M.Map String ClassVar
+data TypeSig = TypeVar ClassVar | TypeFun TypeSig | TypeCon String
 
 --parseTypeSig :: String -> TypeSig
-parseTypeSig expr = classes where
+parseTypeSig expr = classVars where
     (LH.ParseOk xModule) = LH.parseModule expr
     (LH.HsModule _ _ _ _ [LH.HsTypeSig _ _ qualType]) = xModule
     (LH.HsQualType xContext xType) = qualType
     
+    -- Associate each variable with its typeclasses.
+    -- Each variable has an argument index, starting at 0.
+    classVars :: ClassVars
+    classVars = foldr (\(v,ci) m -> M.insertWith (++) v [ci] m) M.empty
+        $ [ (v,(c,i)) | (c,vs) <- M.toList classes, (v,i) <- zip vs [0..] ]
+    
     classes :: M.Map String [String]
     classes = M.fromList $ map f xContext where
-        f (LH.UnQual (LH.HsIdent className), vars) =
-            (className,[ v | LH.HsTyVar (LH.HsIdent v) <- vars ])
+        f (LH.UnQual (LH.HsIdent className), tyVars) =
+            (className,[ t | LH.HsTyVar (LH.HsIdent t) <- tyVars ])
