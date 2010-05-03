@@ -17,6 +17,8 @@ import Control.Monad.CatchIO
 import Control.Monad.Trans (liftIO)
 import System.Random (randomRIO,randomRs,newStdGen)
 
+import qualified Data.Map as M
+
 import Data.Generics (Data(..),everywhereM,mkM)
 
 type Export = (String,String)
@@ -121,3 +123,17 @@ mutate srcFile expr =
             liftIO $ print (i,t,matches)
             return $ unpoint $ matches !! i
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+
+type ClassedVar = (String,[String])
+data TypeSig = TypeVar ClassedVar | TypeFun TypeSig | TypeCon String
+
+--parseTypeSig :: String -> TypeSig
+parseTypeSig expr = classes where
+    (LH.ParseOk xModule) = LH.parseModule expr
+    (LH.HsModule _ _ _ _ [LH.HsTypeSig _ _ qualType]) = xModule
+    (LH.HsQualType xContext xType) = qualType
+    
+    classes :: M.Map String [String]
+    classes = M.fromList $ map f xContext where
+        f (LH.UnQual (LH.HsIdent className), vars) =
+            (className,[ v | LH.HsTyVar (LH.HsIdent v) <- vars ])
