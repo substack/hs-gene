@@ -1,4 +1,5 @@
 {-# LANGUAGE Rank2Types #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Main where
 
 import qualified Language.Haskell.Parser as LH
@@ -19,7 +20,7 @@ import System.Random (randomRIO,randomRs,newStdGen)
 
 import qualified Data.Map as M
 
-import Data.Generics (Data(..),everywhereM,mkM)
+import Data.Generics (Data(..),Typeable(..),everywhereM,mkM)
 
 type Export = (String,String)
 
@@ -112,6 +113,20 @@ printMatches srcFile expr =
                 $ show e ++ " :: " ++ t ++ " => " ++ show matches
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
+-- order-1 mutations (not very powerful)
+mutate1 :: FilePath -> String -> IO String
+mutate1 srcFile expr = 
+    (show <$>) . withModule srcFile imports $ \info -> everyExp (unpoint expr)
+        $ \e -> do
+            t <- H.typeOf $ show e
+            let matches = show e : [ name | (name,eType) <- moduleExports info,
+                    eType == t, name /= show e ]
+            i <- liftIO $ randomRIO (0, length matches - 1)
+            liftIO $ print (i,t,matches)
+            return $ unpoint $ matches !! i
+    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+
+-- arbitrary order mutations
 mutate :: FilePath -> String -> IO String
 mutate srcFile expr = 
     (show <$>) . withModule srcFile imports $ \info -> everyExp (unpoint expr)
@@ -131,7 +146,10 @@ type ClassVars = M.Map String ClassVar
 data TypeSig = TypeVar ClassVar | TypeFun TypeSig TypeSig | TypeCon String
     deriving (Show,Eq,Ord)
 
---parseTypeSig :: String -> TypeSig
+-- Parse a string type signature into a recursive datatype, with the class
+-- constraints for type variables distributed into the leaves for making
+-- comparing leaves easier.
+parseTypeSig :: String -> TypeSig
 parseTypeSig expr = sigWalk xType where
     (LH.ParseOk xModule) = LH.parseModule expr
     (LH.HsModule _ _ _ _ [LH.HsTypeSig _ _ qualType]) = xModule
@@ -154,3 +172,7 @@ parseTypeSig expr = sigWalk xType where
     sigWalk (LH.HsTyFun t1 t2) = TypeFun (sigWalk t1) (sigWalk t2)
     sigWalk (LH.HsTyVar (LH.HsIdent var)) = TypeVar (classVars M.! var)
     sigWalk (LH.HsTyCon (LH.UnQual (LH.HsIdent name))) = TypeCon name
+
+subTypes :: TypeSig -> [TypeSig]
+subTypes t@(TypeFun t1 t2) = t : subTypes t1 ++ subTypes t2
+subTypes t = [t]
