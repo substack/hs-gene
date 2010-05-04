@@ -125,11 +125,14 @@ mutate srcFile expr =
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
 type ClassVar = [(String,Integer)]
+
 type ClassVars = M.Map String ClassVar
-data TypeSig = TypeVar ClassVar | TypeFun TypeSig | TypeCon String
+
+data TypeSig = TypeVar ClassVar | TypeFun TypeSig TypeSig | TypeCon String
+    deriving (Show,Eq,Ord)
 
 --parseTypeSig :: String -> TypeSig
-parseTypeSig expr = classVars where
+parseTypeSig expr = sigWalk xType where
     (LH.ParseOk xModule) = LH.parseModule expr
     (LH.HsModule _ _ _ _ [LH.HsTypeSig _ _ qualType]) = xModule
     (LH.HsQualType xContext xType) = qualType
@@ -140,7 +143,14 @@ parseTypeSig expr = classVars where
     classVars = foldr (\(v,ci) m -> M.insertWith (++) v [ci] m) M.empty
         $ [ (v,(c,i)) | (c,vs) <- M.toList classes, (v,i) <- zip vs [0..] ]
     
+    -- Build a map of the classes to the bound variables.
     classes :: M.Map String [String]
     classes = M.fromList $ map f xContext where
         f (LH.UnQual (LH.HsIdent className), tyVars) =
             (className,[ t | LH.HsTyVar (LH.HsIdent t) <- tyVars ])
+    
+    -- Turn the LH.HsType tree into a TypeSig tree.
+    sigWalk :: LH.HsType -> TypeSig
+    sigWalk (LH.HsTyFun t1 t2) = TypeFun (sigWalk t1) (sigWalk t2)
+    sigWalk (LH.HsTyVar (LH.HsIdent var)) = TypeVar (classVars M.! var)
+    sigWalk (LH.HsTyCon (LH.UnQual (LH.HsIdent name))) = TypeCon name
