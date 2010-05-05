@@ -19,6 +19,7 @@ import Control.Monad.Trans (liftIO)
 import System.Random (randomRIO,randomRs,newStdGen)
 
 import qualified Data.Map as M
+import Data.List ((\\))
 
 import Data.Generics (Data(..),Typeable(..),everywhereM,mkM)
 
@@ -113,20 +114,7 @@ printMatches srcFile expr =
                 $ show e ++ " :: " ++ t ++ " => " ++ show matches
     where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
 
--- order-1 mutations (not very powerful)
-mutate1 :: FilePath -> String -> IO String
-mutate1 srcFile expr = 
-    (show <$>) . withModule srcFile imports $ \info -> everyExp (unpoint expr)
-        $ \e -> do
-            t <- H.typeOf $ show e
-            let matches = show e : [ name | (name,eType) <- moduleExports info,
-                    eType == t, name /= show e ]
-            i <- liftIO $ randomRIO (0, length matches - 1)
-            liftIO $ print (i,t,matches)
-            return $ unpoint $ matches !! i
-    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
-
--- arbitrary order mutations
+-- order-1 mutations
 mutate :: FilePath -> String -> IO String
 mutate srcFile expr = 
     (show <$>) . withModule srcFile imports $ \info -> everyExp (unpoint expr)
