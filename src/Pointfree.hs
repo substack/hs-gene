@@ -88,32 +88,6 @@ getInfo srcFile = do
 unpoint :: String -> PF.Expr
 unpoint = (\(PF.TLE x) -> x) . (\(Right e) -> e) . pointfree
 
-everyExp :: (Data a, Monad m) => a -> (a -> m a) -> m a
-everyExp x f = everywhereM (mkM f) x
-
-everyExp_ :: (Data a, Monad m) => a -> (a -> m ()) -> m ()
-everyExp_ x f = everywhereM (mkM $ \d -> f d >> return d) x
-    >> return ()
-
-printSubTypes :: FilePath -> String -> Interpreter ()
-printSubTypes srcFile expr =
-    withModule srcFile imports $ \info -> everyExp_ (unpoint expr)
-        $ \e -> do
-            t <- H.typeOf $ show e
-            liftIO $ putStrLn $ show e ++ " :: " ++ t
-    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
-
-printMatches :: FilePath -> String -> Interpreter ()
-printMatches srcFile expr =
-    withModule srcFile imports $ \info -> everyExp_ (unpoint expr)
-        $ \e -> do
-            t <- H.typeOf $ show e
-            let matches = [ name | (name,eType) <- moduleExports info,
-                    eType == t, name /= show e ]
-            liftIO $ putStrLn
-                $ show e ++ " :: " ++ t ++ " => " ++ show matches
-    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
-
 -- order-1 mutations
 mutate :: FilePath -> String -> IO String
 mutate srcFile expr = 
@@ -125,7 +99,11 @@ mutate srcFile expr =
             i <- liftIO $ randomRIO (0, length matches - 1)
             liftIO $ print (i,t,matches)
             return $ unpoint $ matches !! i
-    where imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+    where
+        imports = [("Control.Monad",Nothing),("Control.Arrow",Nothing)]
+        
+        everyExp :: (Data a, Monad m) => a -> (a -> m a) -> m a
+        everyExp x f = everywhereM (mkM f) x
 
 type ClassVar = [(String,Integer)]
 
@@ -164,3 +142,9 @@ parseTypeSig expr = sigWalk xType where
 subTypes :: TypeSig -> [TypeSig]
 subTypes t@(TypeFun t1 t2) = t : subTypes t1 ++ subTypes t2
 subTypes t = [t]
+
+-- Note: doesn't work with multi-param type classes
+instanceOf :: String -> String -> InterpreterT Bool
+instanceOf xType xInstance = H.typeChecks $
+    "let f :: (" ++ xInstance ++ " a) => "
+    ++ "a -> a; f = id in f (undefined :: " ++ xType ++ ")"
