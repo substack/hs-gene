@@ -39,16 +39,16 @@ withModule srcFile imports f = do
         Left msg -> fail $ show msg
         Right x -> return x
 
-getExports :: H.Id -> InterpreterT [(String,String)]
-getExports name = mapM f =<< (concatMap ids <$> H.getModuleExports name)
+getExports :: H.Id -> InterpreterT [(String,TypeSig)]
+getExports name = do
+    names <- concatMap nameOf <$> H.getModuleExports name
+    types <- map parseTypeSig <$> mapM H.typeOf names
+    return $ zip names types
     where
-        f :: String -> InterpreterT (String,String)
-        f x = ((,) x) <$> H.typeOf x
-        
-        ids :: H.ModuleElem -> [String]
-        ids (H.Fun x) = [x]
-        ids (H.Class _ xs) = xs
-        ids (H.Data _ xs) = xs
+        nameOf :: H.ModuleElem -> [String]
+        nameOf (H.Fun x) = [x]
+        nameOf (H.Class _ xs) = xs
+        nameOf (H.Data _ xs) = xs
 
 getName :: FilePath -> IO String
 getName srcFile = do
@@ -70,7 +70,7 @@ mutate :: FilePath -> String -> IO String
 mutate srcFile expr = (show <$>) . withModule srcFile imports $ \name -> do
     exports <- getExports name
     everyExp (unpoint expr) $ \e -> do
-        t <- H.typeOf $ show e
+        t <- parseTypeSig <$> (H.typeOf $ show e)
         let matches = show e : [ name | (name,eType) <- exports,
                 eType == t, name /= show e ]
         i <- liftIO $ randomRIO (0, length matches - 1)
@@ -86,7 +86,11 @@ type ClassVar = [(String,Integer)]
 
 type ClassVars = M.Map String ClassVar
 
-data TypeSig = TypeVar ClassVar | TypeFun TypeSig TypeSig | TypeCon String
+data TypeSig
+    = TypeVar String ClassVar
+    | TypeFun TypeSig TypeSig
+    | TypeCon String
+    | TypeApp TypeSig TypeSig
     deriving (Show,Eq,Ord)
 
 -- Parse a string type signature into a recursive datatype, with the class
@@ -113,10 +117,35 @@ parseTypeSig expr = sigWalk xType where
     -- Turn the LH.HsType tree into a TypeSig tree.
     sigWalk :: LH.HsType -> TypeSig
     sigWalk (LH.HsTyFun t1 t2) = TypeFun (sigWalk t1) (sigWalk t2)
+    sigWalk (LH.HsTyApp t1 t2) = TypeApp (sigWalk t1) (sigWalk t2)
     sigWalk (LH.HsTyVar (LH.HsIdent var)) =
-        TypeVar (M.findWithDefault [] var classVars)
+        TypeVar var (M.findWithDefault [] var classVars)
     sigWalk (LH.HsTyCon (LH.UnQual (LH.HsIdent name))) = TypeCon name
+    sigWalk (LH.HsTyCon (LH.Special LH.HsListCon)) = TypeCon "[]"
+    sigWalk (LH.HsTyCon (LH.Special LH.HsUnitCon)) = TypeCon "()"
+    sigWalk (LH.HsTyTuple [a]) = TypeApp (TypeCon "(,)") (sigWalk a)
+    sigWalk (LH.HsTyTuple ts) =
+        foldr (\t acc -> TypeApp acc (sigWalk t)) (TypeCon name) ts
+            where name = "(" ++ (replicate (length ts) ',') ++ ")"
+    sigWalk t = error $ "Unexpected type: " ++ show t
+        ++ "\nin expression: " ++ expr
 
 subTypes :: TypeSig -> [TypeSig]
 subTypes t@(TypeFun t1 t2) = t : subTypes t1 ++ subTypes t2
 subTypes t = [t]
+
+-- if two functions can be combined, make it so
+synthesize :: Pool -> String -> String -> InterpreterT (Maybe String)
+synthesize pool f g = do
+    let h = f ++ "." ++ g
+    u <- useful pool h
+    return $ if u then Just h else Nothing
+
+-- whether a function type checks and has instances to satisfy its type classes
+useful :: Pool -> String -> InterpreterT Bool
+useful pool expr = (satisfied &&) <$> H.typeChecks expr
+    where
+        satisfied = undefined
+
+remix :: Pool -> InterpreterT Pool
+remix pool = undefined
