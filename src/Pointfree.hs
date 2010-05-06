@@ -117,7 +117,7 @@ data TypeSig = TypeVar ClassVar | TypeFun TypeSig TypeSig | TypeCon String
 -- comparing leaves easier.
 parseTypeSig :: String -> TypeSig
 parseTypeSig expr = sigWalk xType where
-    (LH.ParseOk xModule) = LH.parseModule expr
+    (LH.ParseOk xModule) = LH.parseModule $ "undefined :: " ++ expr
     (LH.HsModule _ _ _ _ [LH.HsTypeSig _ _ qualType]) = xModule
     (LH.HsQualType xContext xType) = qualType
     
@@ -136,7 +136,8 @@ parseTypeSig expr = sigWalk xType where
     -- Turn the LH.HsType tree into a TypeSig tree.
     sigWalk :: LH.HsType -> TypeSig
     sigWalk (LH.HsTyFun t1 t2) = TypeFun (sigWalk t1) (sigWalk t2)
-    sigWalk (LH.HsTyVar (LH.HsIdent var)) = TypeVar (classVars M.! var)
+    sigWalk (LH.HsTyVar (LH.HsIdent var)) =
+        TypeVar (M.findWithDefault [] var classVars)
     sigWalk (LH.HsTyCon (LH.UnQual (LH.HsIdent name))) = TypeCon name
 
 subTypes :: TypeSig -> [TypeSig]
